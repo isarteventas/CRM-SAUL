@@ -21,7 +21,7 @@ const NAV: [string, string, React.ReactNode, boolean][] = [
   ['mensajes', 'Mensajes', ico(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />), false],
 ];
 
-export default function CrmApp({ negocioInicial, yo }: { negocioInicial: any; yo: any }) {
+export default function CrmApp({ negocioInicial, yo, comoAdmin = false }: { negocioInicial: any; yo: any; comoAdmin?: boolean }) {
   const sb = useMemo(() => supabaseBrowser(), []);
   const router = useRouter();
   const [negocio, setNegocio] = useState<any>(negocioInicial);
@@ -545,6 +545,12 @@ export default function CrmApp({ negocioInicial, yo }: { negocioInicial: any; yo
           </div>
         </nav>
         <main>
+          {comoAdmin ? (
+            <div className="note" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <span>Estás viendo el panel de <b>{negocio.nombre}</b> como EDAI. Los cambios que hagas se guardan en su cuenta.</span>
+              <a className="btn sm" href="/admin">Volver al panel maestro</a>
+            </div>
+          ) : null}
           {!puede ? (
             <div className="note">
               {negocio.estado !== 'activo'
