@@ -134,4 +134,28 @@ export async function crearNegocio(input: {
       email,
     });
     if (e2) return { ok: false, error: e2.message };
-    return { ok: true, mensaje: invitado ? `Negocio creado. Invitación enviada a ${email}` : `Negocio creado. ${email} ya
+    return { ok: true, mensaje: invitado ? `Negocio creado. Invitación enviada a ${email}` : `Negocio creado. ${email} ya tenía cuenta.` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Error inesperado' };
+  }
+}
+
+/** EDAI cambia el plan, la fecha de pago o suspende un negocio. */
+export async function actualizarNegocio(input: {
+  id: string;
+  estado: 'activo' | 'suspendido';
+  plan_edai?: string;
+  vence_edai?: string;
+}): Promise<Resultado> {
+  try {
+    if (!(await esAdminEdai())) return { ok: false, error: 'No autorizado.' };
+    const { error } = await supabaseAdmin()
+      .from('crm_negocios')
+      .update({ estado: input.estado, plan_edai: input.plan_edai || null, vence_edai: input.vence_edai || null })
+      .eq('id', input.id);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, mensaje: 'Negocio actualizado' };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Error inesperado' };
+  }
+}
