@@ -12,7 +12,7 @@ export default async function Inicio() {
   } = await sb.auth.getUser();
   if (!user) redirect('/login');
 
-  // Admin de EDAI: se revisa con la función y, si falla, leyendo su propia fila.
+  // Admin de EDAI: se revisa con la función y, si falla, leyendo su propia fila
   const rpc = await sb.rpc('crm_es_admin');
   const fila = await sb.from('edai_admins').select('user_id').eq('user_id', user.id).maybeSingle();
   const esAdmin = rpc.data === true || !!fila.data;
