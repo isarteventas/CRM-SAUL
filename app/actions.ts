@@ -125,36 +125,99 @@ export async function crearNegocio(input: {
       .single();
     if (error) return { ok: false, error: error.message };
 
-    const { id: userId, invitado } = await invitarOEncontrar(email, input.dueno_nombre);
+    // Si la invitación falla, se borra el negocio para no dejar duplicados vacíos.
+    let userId = '';
+    let invitado = false;
+    try {
+      const r = await invitarOEncontrar(email, input.dueno_nombre);
+      userId = r.id;
+      invitado = r.invitado;
+    } catch (e: any) {
+      await admin.from('crm_negocios').delete().eq('id', negocio.id);
+      return { ok: false, error: 'No se pudo invitar al dueño: ' + (e?.message || 'error') };
+    }
     const { error: e2 } = await admin.from('crm_usuarios').insert({
       negocio_id: negocio.id,
       user_id: userId,
       rol: 'dueno',
       nombre: input.dueno_nombre.trim(),
+      telefono: input.telefono || null,
       email,
     });
-    if (e2) return { ok: false, error: e2.message };
+    if (e2) {
+      await admin.from('crm_negocios').delete().eq('id', negocio.id);
+      return { ok: false, error: e2.message };
+    }
     return { ok: true, mensaje: invitado ? `Negocio creado. Invitación enviada a ${email}` : `Negocio creado. ${email} ya tenía cuenta.` };
   } catch (e: any) {
     return { ok: false, error: e?.message || 'Error inesperado' };
   }
 }
 
-/** EDAI cambia el plan, la fecha de pago o suspende un negocio. */
+/** EDAI edita un negocio: nombre, WhatsApp, dueño, plan, fecha de pago y estado. */
 export async function actualizarNegocio(input: {
   id: string;
-  estado: 'activo' | 'suspendido';
+  nombre?: string;
+  telefono?: string;
+  dueno_nombre?: string;
+  estado?: 'activo' | 'suspendido';
   plan_edai?: string;
   vence_edai?: string;
 }): Promise<Resultado> {
   try {
     if (!(await esAdminEdai())) return { ok: false, error: 'No autorizado.' };
-    const { error } = await supabaseAdmin()
-      .from('crm_negocios')
-      .update({ estado: input.estado, plan_edai: input.plan_edai || null, vence_edai: input.vence_edai || null })
-      .eq('id', input.id);
-    if (error) return { ok: false, error: error.message };
+    const admin = supabaseAdmin();
+    const cambios: Record<string, any> = {};
+    if (input.nombre !== undefined) {
+      if (!input.nombre.trim()) return { ok: false, error: 'El nombre del negocio no puede quedar vacío.' };
+      cambios.nombre = input.nombre.trim();
+    }
+    if (input.telefono !== undefined) cambios.telefono = input.telefono.trim() || null;
+    if (input.estado !== undefined) cambios.estado = input.estado;
+    if (input.plan_edai !== undefined) cambios.plan_edai = input.plan_edai || null;
+    if (input.vence_edai !== undefined) cambios.vence_edai = input.vence_edai || null;
+
+    if (Object.keys(cambios).length) {
+      const { error } = await admin.from('crm_negocios').update(cambios).eq('id', input.id);
+      if (error) return { ok: false, error: error.message };
+    }
+    if (input.dueno_nombre !== undefined && input.dueno_nombre.trim()) {
+      const { error } = await admin
+        .from('crm_usuarios')
+        .update({ nombre: input.dueno_nombre.trim(), telefono: input.telefono?.trim() || undefined })
+        .eq('negocio_id', input.id)
+        .eq('rol', 'dueno');
+      if (error) return { ok: false, error: error.message };
+    }
     return { ok: true, mensaje: 'Negocio actualizado' };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Error inesperado' };
+  }
+}
+
+/** EDAI elimina un negocio con todos sus datos (clientes, planes, recordatorios...). */
+export async function eliminarNegocio(input: { id: string }): Promise<Resultado> {
+  try {
+    if (!(await esAdminEdai())) return { ok: false, error: 'No autorizado.' };
+    const { error } = await supabaseAdmin().from('crm_negocios').delete().eq('id', input.id);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, mensaje: 'Negocio eliminado' };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Error inesperado' };
+  }
+}
+
+/** EDAI reenvía al dueño el correo para crear o cambiar su contraseña. */
+export async function reenviarAcceso(input: { email: string }): Promise<Resultado> {
+  try {
+    if (!(await esAdminEdai())) return { ok: false, error: 'No autorizado.' };
+    const correo = (input.email || '').trim().toLowerCase();
+    if (!emailValido(correo)) return { ok: false, error: 'Correo inválido.' };
+    const { error } = await supabaseAdmin().auth.resetPasswordForEmail(correo, {
+      redirectTo: `${origen()}/auth/confirm?next=/actualizar-clave`,
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, mensaje: `Acceso reenviado a ${correo}` };
   } catch (e: any) {
     return { ok: false, error: e?.message || 'Error inesperado' };
   }
