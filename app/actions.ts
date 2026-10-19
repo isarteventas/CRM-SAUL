@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-type Resultado = { ok: true; mensaje?: string } | { ok: false; error: string };
+type Resultado = { ok: boolean; mensaje?: string; error?: string };
 
 function origen() {
   const h = headers();
@@ -15,18 +15,19 @@ const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 // Invita por correo; si la persona ya tiene cuenta, la reutiliza.
 async function invitarOEncontrar(email: string, nombre: string) {
   const admin = supabaseAdmin();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+  const { data, error }: any = await admin.auth.admin.inviteUserByEmail(email, {
     data: { nombre },
     redirectTo: `${origen()}/auth/confirm?next=/actualizar-clave`,
   });
   if (!error && data?.user) return { id: data.user.id, invitado: true };
 
   for (let page = 1; page <= 20; page++) {
-    const { data: lista, error: e2 } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    const { data: lista, error: e2 }: any = await admin.auth.admin.listUsers({ page, perPage: 200 });
     if (e2) throw new Error(e2.message);
-    const u = lista.users.find((x) => (x.email || '').toLowerCase() === email);
-    if (u) return { id: u.id, invitado: false };
-    if (lista.users.length < 200) break;
+    const usuarios: any[] = lista?.users || [];
+    const u = usuarios.find((x: any) => String(x.email || '').toLowerCase() === email);
+    if (u) return { id: u.id as string, invitado: false };
+    if (usuarios.length < 200) break;
   }
   throw new Error(error?.message || 'No se pudo invitar a ese correo');
 }
